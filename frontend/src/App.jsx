@@ -32,6 +32,120 @@ export default function App() {
 }
 
 /* ────────────────────────────────────────────────────────────── */
+/* Рендер одного питання за типом                                 */
+/* ────────────────────────────────────────────────────────────── */
+function QuestionField({ q, value, onChange }) {
+  const val = value || ''
+
+  switch (q.type) {
+    case 'text':
+      return (
+        <input
+          type="text"
+          value={val}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
+
+    case 'textarea':
+      return (
+        <textarea
+          rows={3}
+          value={val}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
+
+    case 'number':
+      return (
+        <input
+          type="number"
+          value={val}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
+
+    case 'select':
+      return (
+        <select value={val} onChange={(e) => onChange(e.target.value)}>
+          <option value="">— Оберіть —</option>
+          {(q.options || []).map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      )
+
+    case 'select_other': {
+      const options = q.options || []
+      const isOther = val !== '' && !options.includes(val)
+      return (
+        <div className="select-other">
+          <select
+            value={isOther ? '__other__' : val}
+            onChange={(e) => {
+              if (e.target.value === '__other__') {
+                onChange('')
+              } else {
+                onChange(e.target.value)
+              }
+            }}
+          >
+            <option value="">— Оберіть —</option>
+            {options.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+            <option value="__other__">Інше (вказати)</option>
+          </select>
+          {(isOther || val === '') && (
+            <input
+              type="text"
+              placeholder="Вкажіть свій варіант"
+              value={isOther ? val : ''}
+              onChange={(e) => onChange(e.target.value)}
+              style={{ marginTop: '8px' }}
+            />
+          )}
+        </div>
+      )
+    }
+
+    case 'yesno':
+      return (
+        <div className="yesno-group">
+          {['Так', 'Ні'].map((opt) => (
+            <label key={opt} className={`yesno-btn ${val === opt ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name={q.id}
+                value={opt}
+                checked={val === opt}
+                onChange={() => onChange(opt)}
+                style={{ display: 'none' }}
+              />
+              {opt}
+            </label>
+          ))}
+        </div>
+      )
+
+    default:
+      // Невідомий тип — рендеримо як text щоб не губити питання
+      return (
+        <input
+          type="text"
+          value={val}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={`(${q.type})`}
+        />
+      )
+  }
+}
+
+/* ────────────────────────────────────────────────────────────── */
 /* КЛІЄНТ: вибір сервісу → ML-питання → відправка заявки         */
 /* ────────────────────────────────────────────────────────────── */
 function ClientView() {
@@ -185,49 +299,15 @@ function ClientView() {
           <div className="questions">
             {questions.map((q) => (
               <div key={q.id} className="form-group">
-                <label>{q.label}</label>
-                {q.type === 'text' && (
-                  <input
-                    type="text"
-                    value={answers[q.id] || ''}
-                    onChange={(e) =>
-                      setAnswers({ ...answers, [q.id]: e.target.value })
-                    }
-                  />
-                )}
-                {q.type === 'textarea' && (
-                  <textarea
-                    rows={3}
-                    value={answers[q.id] || ''}
-                    onChange={(e) =>
-                      setAnswers({ ...answers, [q.id]: e.target.value })
-                    }
-                  />
-                )}
-                {q.type === 'number' && (
-                  <input
-                    type="number"
-                    value={answers[q.id] || ''}
-                    onChange={(e) =>
-                      setAnswers({ ...answers, [q.id]: e.target.value })
-                    }
-                  />
-                )}
-                {q.type === 'select' && (
-                  <select
-                    value={answers[q.id] || ''}
-                    onChange={(e) =>
-                      setAnswers({ ...answers, [q.id]: e.target.value })
-                    }
-                  >
-                    <option value="">— Оберіть —</option>
-                    {(q.options || []).map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
-                )}
+                <label>
+                  {q.label}
+                  {q.required && <span style={{ color: 'red' }}> *</span>}
+                </label>
+                <QuestionField
+                  q={q}
+                  value={answers[q.id]}
+                  onChange={(val) => setAnswers({ ...answers, [q.id]: val })}
+                />
               </div>
             ))}
           </div>
@@ -321,7 +401,6 @@ function ContractorView() {
     }
   }
 
-  /* Деталі однієї заявки */
   if (selected) {
     return (
       <div className="card">
@@ -405,7 +484,6 @@ function ContractorView() {
     )
   }
 
-  /* Список заявок */
   return (
     <div className="card">
       <div className="form-group">

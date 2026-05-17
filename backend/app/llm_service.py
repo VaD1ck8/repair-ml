@@ -7,8 +7,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 async def generate_questions(service_name: str, description: str = "") -> list[dict]:
+    api_key = os.getenv("GROQ_API_KEY")
+    
+    print(f"[DEBUG] GROQ_API_KEY present: {bool(api_key)}")
+    print(f"[DEBUG] GROQ_API_KEY prefix: {api_key[:10] if api_key else 'NONE'}")
+    print(f"[DEBUG] service_name: {service_name}")
+    
+    if not api_key:
+        print("[ERROR] GROQ_API_KEY is not set!")
+        return _fallback(error="GROQ_API_KEY not set")
+
     try:
-        client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+        client = AsyncGroq(api_key=api_key)
 
         prompt = f"""
 Ти — асистент для сервісу ремонту. Згенеруй 6-8 уточнюючих питань для заявки.
@@ -37,13 +47,16 @@ async def generate_questions(service_name: str, description: str = "") -> list[d
 Генеруй питання максимально релевантні до сервісу "{service_name}".
 """
 
+        print("[DEBUG] Sending request to Groq...")
         response = await client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
         )
+        print("[DEBUG] Got response from Groq!")
 
         text = response.choices[0].message.content.strip()
+        print(f"[DEBUG] Raw response: {text[:200]}")
 
         if "```" in text:
             text = text.split("```")[1]
@@ -52,13 +65,21 @@ async def generate_questions(service_name: str, description: str = "") -> list[d
             text = text.strip()
 
         questions = json.loads(text)
+        print(f"[DEBUG] Parsed {len(questions)} questions successfully")
         return questions
 
     except Exception as e:
-        print(f"Groq error: {e}")
+        print(f"[ERROR] Groq error type: {type(e).__name__}")
+        print(f"[ERROR] Groq error message: {e}")
         traceback.print_exc()
-        return [
-            {"id": "q1", "label": "Опишіть проблему детальніше", "type": "textarea", "required": True},
-            {"id": "q2", "label": "Коли виникла проблема?", "type": "text", "required": True},
-            {"id": "q3", "label": "Ваш телефон для зв'язку", "type": "text", "required": True},
-        ]
+        return _fallback(error=str(e))
+
+
+def _fallback(error: str = "") -> list[dict]:
+    if error:
+        print(f"[FALLBACK] Returning fallback due to: {error}")
+    return [
+        {"id": "q1", "label": "Опишіть проблему детальніше", "type": "textarea", "required": True},
+        {"id": "q2", "label": "Коли виникла проблема?", "type": "text", "required": True},
+        {"id": "q3", "label": "Ваш телефон для зв'язку", "type": "text", "required": True},
+    ]
