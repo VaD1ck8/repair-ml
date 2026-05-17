@@ -1,14 +1,14 @@
 import os
 import json
 import traceback
-from groq import Groq
+from groq import AsyncGroq
 from dotenv import load_dotenv
 
 load_dotenv()
 
 async def generate_questions(service_name: str, description: str = "") -> list[dict]:
     try:
-        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
 
         prompt = f"""
 Ти — асистент для сервісу ремонту. Згенеруй 6-8 уточнюючих питань для заявки.
@@ -37,7 +37,7 @@ async def generate_questions(service_name: str, description: str = "") -> list[d
 Генеруй питання максимально релевантні до сервісу "{service_name}".
 """
 
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
