@@ -27,26 +27,34 @@ function QuestionField({ q, value, onChange }) {
   if (q.type === 'yesno') {
     return (
       <div style={{ display: 'flex', gap: 10 }}>
-        {['Так', 'Ні'].map((opt) => (
-          <button
-            key={opt}
-            type="button"
-            onClick={() => onChange(opt)}
-            style={{
-              padding: '9px 32px',
-              borderRadius: 8,
-              border: `2px solid ${val === opt ? '#2563eb' : '#d1d5db'}`,
-              background: val === opt ? '#eff6ff' : '#fff',
-              color: val === opt ? '#2563eb' : '#374151',
-              fontWeight: val === opt ? 600 : 400,
-              fontSize: 14,
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
-          >
-            {opt}
-          </button>
-        ))}
+        {['Так', 'Ні'].map((opt) => {
+          const selected = val === opt
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => onChange(opt)}
+              style={{
+                padding: '10px 36px',
+                borderRadius: 8,
+                border: `2px solid ${selected ? '#2563eb' : '#d1d5db'}`,
+                background: selected ? '#2563eb' : '#fff',
+                color: selected ? '#fff' : '#374151',
+                fontWeight: 600,
+                fontSize: 15,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                boxShadow: selected ? '0 2px 8px rgba(37,99,235,0.25)' : 'none',
+                outline: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              {selected ? (opt === 'Так' ? '✓ Так' : '✓ Ні') : opt}
+            </button>
+          )
+        })}
       </div>
     )
   }
