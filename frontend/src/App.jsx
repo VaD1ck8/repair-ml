@@ -26,33 +26,65 @@ function QuestionField({ q, value, onChange }) {
 
   if (q.type === 'yesno') {
     return (
-      <div style={{ display: 'flex', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 12 }}>
         {['Так', 'Ні'].map((opt) => {
           const selected = val === opt
           return (
-            <button
+            <label
               key={opt}
-              type="button"
-              onClick={() => onChange(opt)}
               style={{
-                padding: '10px 36px',
-                borderRadius: 8,
-                border: `2px solid ${selected ? '#2563eb' : '#d1d5db'}`,
-                background: selected ? '#2563eb' : '#fff',
-                color: selected ? '#fff' : '#374151',
-                fontWeight: 600,
-                fontSize: 15,
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-                boxShadow: selected ? '0 2px 8px rgba(37,99,235,0.25)' : 'none',
-                outline: 'none',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
+                gap: 10,
+                padding: '10px 24px',
+                borderRadius: 8,
+                border: `2px solid ${selected ? '#2563eb' : '#d1d5db'}`,
+                background: selected ? '#eff6ff' : '#fff',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                userSelect: 'none',
+                minWidth: 90,
               }}
             >
-              {selected ? (opt === 'Так' ? '✓ Так' : '✓ Ні') : opt}
-            </button>
+              {/* кастомний радіо-кружок */}
+              <span style={{
+                width: 18,
+                height: 18,
+                borderRadius: '50%',
+                border: `2px solid ${selected ? '#2563eb' : '#9ca3af'}`,
+                background: selected ? '#2563eb' : '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                transition: 'all 0.15s',
+              }}>
+                {selected && (
+                  <span style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: '#fff',
+                    display: 'block',
+                  }} />
+                )}
+              </span>
+              <input
+                type="radio"
+                name={q.id}
+                value={opt}
+                checked={selected}
+                onChange={() => onChange(opt)}
+                style={{ display: 'none' }}
+              />
+              <span style={{
+                fontSize: 15,
+                fontWeight: selected ? 600 : 400,
+                color: selected ? '#2563eb' : '#374151',
+              }}>
+                {opt}
+              </span>
+            </label>
           )
         })}
       </div>
