@@ -9,21 +9,10 @@ export default function App() {
       <header className="header">
         <h1>🔧 Repair Services</h1>
         <div className="role-toggle">
-          <button
-            className={role === 'client' ? 'active' : ''}
-            onClick={() => setRole('client')}
-          >
-            Клієнт
-          </button>
-          <button
-            className={role === 'contractor' ? 'active' : ''}
-            onClick={() => setRole('contractor')}
-          >
-            Виконавець
-          </button>
+          <button className={role === 'client' ? 'active' : ''} onClick={() => setRole('client')}>Клієнт</button>
+          <button className={role === 'contractor' ? 'active' : ''} onClick={() => setRole('contractor')}>Виконавець</button>
         </div>
       </header>
-
       <main className="container">
         {role === 'client' ? <ClientView /> : <ContractorView />}
       </main>
@@ -31,123 +20,116 @@ export default function App() {
   )
 }
 
-/* ────────────────────────────────────────────────────────────── */
-/* Рендер одного питання за типом                                 */
-/* ────────────────────────────────────────────────────────────── */
+/* ── Рендер поля питання за типом ── */
 function QuestionField({ q, value, onChange }) {
-  const val = value || ''
+  const val = value ?? ''
 
-  switch (q.type) {
-    case 'text':
-      return (
-        <input
-          type="text"
-          value={val}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      )
-
-    case 'textarea':
-      return (
-        <textarea
-          rows={3}
-          value={val}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      )
-
-    case 'number':
-      return (
-        <input
-          type="number"
-          value={val}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      )
-
-    case 'select':
-      return (
-        <select value={val} onChange={(e) => onChange(e.target.value)}>
-          <option value="">— Оберіть —</option>
-          {(q.options || []).map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
-      )
-
-    case 'select_other': {
-      const options = q.options || []
-      const isOther = val !== '' && !options.includes(val)
-      return (
-        <div className="select-other">
-          <select
-            value={isOther ? '__other__' : val}
-            onChange={(e) => {
-              if (e.target.value === '__other__') {
-                onChange('')
-              } else {
-                onChange(e.target.value)
-              }
+  if (q.type === 'yesno') {
+    return (
+      <div style={{ display: 'flex', gap: 10 }}>
+        {['Так', 'Ні'].map((opt) => (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onChange(opt)}
+            style={{
+              padding: '9px 32px',
+              borderRadius: 8,
+              border: `2px solid ${val === opt ? '#2563eb' : '#d1d5db'}`,
+              background: val === opt ? '#eff6ff' : '#fff',
+              color: val === opt ? '#2563eb' : '#374151',
+              fontWeight: val === opt ? 600 : 400,
+              fontSize: 14,
+              cursor: 'pointer',
+              transition: 'all 0.15s',
             }}
           >
-            <option value="">— Оберіть —</option>
-            {options.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-            <option value="__other__">Інше (вказати)</option>
-          </select>
-          {(isOther || val === '') && (
-            <input
-              type="text"
-              placeholder="Вкажіть свій варіант"
-              value={isOther ? val : ''}
-              onChange={(e) => onChange(e.target.value)}
-              style={{ marginTop: '8px' }}
-            />
-          )}
-        </div>
-      )
-    }
-
-    case 'yesno':
-      return (
-        <div className="yesno-group">
-          {['Так', 'Ні'].map((opt) => (
-            <label key={opt} className={`yesno-btn ${val === opt ? 'selected' : ''}`}>
-              <input
-                type="radio"
-                name={q.id}
-                value={opt}
-                checked={val === opt}
-                onChange={() => onChange(opt)}
-                style={{ display: 'none' }}
-              />
-              {opt}
-            </label>
-          ))}
-        </div>
-      )
-
-    default:
-      // Невідомий тип — рендеримо як text щоб не губити питання
-      return (
-        <input
-          type="text"
-          value={val}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={`(${q.type})`}
-        />
-      )
+            {opt}
+          </button>
+        ))}
+      </div>
+    )
   }
+
+  if (q.type === 'select_other') {
+    const options = q.options || []
+    const isOther = val !== '' && !options.includes(val)
+    const selectVal = isOther ? '__other__' : val
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <select
+          className="form-control"
+          value={selectVal}
+          onChange={(e) => {
+            if (e.target.value === '__other__') onChange('')
+            else onChange(e.target.value)
+          }}
+          style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', background: 'white' }}
+        >
+          <option value="">— Оберіть —</option>
+          {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+          <option value="__other__">Інше (вказати)</option>
+        </select>
+        {(selectVal === '__other__') && (
+          <input
+            type="text"
+            placeholder="Вкажіть свій варіант"
+            value={isOther ? val : ''}
+            onChange={(e) => onChange(e.target.value)}
+            style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontFamily: 'inherit' }}
+          />
+        )}
+      </div>
+    )
+  }
+
+  if (q.type === 'select') {
+    return (
+      <select
+        value={val}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', background: 'white' }}
+      >
+        <option value="">— Оберіть —</option>
+        {(q.options || []).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+      </select>
+    )
+  }
+
+  if (q.type === 'textarea') {
+    return (
+      <textarea
+        rows={3}
+        value={val}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', minHeight: 70 }}
+      />
+    )
+  }
+
+  if (q.type === 'number') {
+    return (
+      <input
+        type="number"
+        value={val}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontFamily: 'inherit' }}
+      />
+    )
+  }
+
+  // text + будь-який невідомий тип
+  return (
+    <input
+      type="text"
+      value={val}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontFamily: 'inherit' }}
+    />
+  )
 }
 
-/* ────────────────────────────────────────────────────────────── */
-/* КЛІЄНТ: вибір сервісу → ML-питання → відправка заявки         */
-/* ────────────────────────────────────────────────────────────── */
+/* ── КЛІЄНТ ── */
 function ClientView() {
   const [services, setServices] = useState([])
   const [step, setStep] = useState(1)
@@ -162,9 +144,7 @@ function ClientView() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    api.getServices()
-      .then(setServices)
-      .catch((e) => setError(e.message))
+    api.getServices().then(setServices).catch((e) => setError(e.message))
   }, [])
 
   const handleGenerate = async () => {
@@ -184,10 +164,7 @@ function ClientView() {
   }
 
   const handleSubmit = async () => {
-    if (!clientName.trim()) {
-      setError('Введіть ваше імʼя')
-      return
-    }
+    if (!clientName.trim()) { setError('Введіть ваше імʼя'); return }
     setLoading(true)
     setError(null)
     try {
@@ -209,15 +186,8 @@ function ClientView() {
   }
 
   const reset = () => {
-    setStep(1)
-    setSelectedService(null)
-    setDescription('')
-    setQuestions([])
-    setAnswers({})
-    setClientName('')
-    setClientContact('')
-    setSuccess(null)
-    setError(null)
+    setStep(1); setSelectedService(null); setDescription(''); setQuestions([])
+    setAnswers({}); setClientName(''); setClientContact(''); setSuccess(null); setError(null)
   }
 
   if (step === 3 && success) {
@@ -225,13 +195,9 @@ function ClientView() {
       <div className="card success">
         <div className="success-icon">✅</div>
         <h2>Заявка створена</h2>
-        <p>
-          Номер заявки: <strong>#{success.id}</strong>
-        </p>
+        <p>Номер заявки: <strong>#{success.id}</strong></p>
         <p className="muted">Очікуйте, поки виконавець прийме її в роботу.</p>
-        <button className="btn-primary" onClick={reset}>
-          Створити ще одну
-        </button>
+        <button className="btn-primary" onClick={reset}>Створити ще одну</button>
       </div>
     )
   }
@@ -262,7 +228,6 @@ function ClientView() {
               </div>
             ))}
           </div>
-
           {selectedService && (
             <>
               <hr />
@@ -271,16 +236,12 @@ function ClientView() {
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Напр.: тече кран на кухні, потрібно замінити прокладку або весь кран"
+                  placeholder="Напр.: тече кран на кухні"
                   rows={3}
                 />
               </div>
               <div className="actions">
-                <button
-                  className="btn-primary"
-                  onClick={handleGenerate}
-                  disabled={loading}
-                >
+                <button className="btn-primary" onClick={handleGenerate} disabled={loading}>
                   {loading ? '⏳ Генерую питання...' : 'Далі →'}
                 </button>
               </div>
@@ -292,21 +253,19 @@ function ClientView() {
       {step === 2 && (
         <div className="card">
           <h2>Уточнення по «{selectedService.name}»</h2>
-          <p className="muted">
-            AI згенерував питання, відповіді на які допоможуть виконавцю.
-          </p>
+          <p className="muted">AI згенерував питання, відповіді на які допоможуть виконавцю.</p>
 
           <div className="questions">
             {questions.map((q) => (
               <div key={q.id} className="form-group">
                 <label>
                   {q.label}
-                  {q.required && <span style={{ color: 'red' }}> *</span>}
+                  {q.required && <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>}
                 </label>
                 <QuestionField
                   q={q}
                   value={answers[q.id]}
-                  onChange={(val) => setAnswers({ ...answers, [q.id]: val })}
+                  onChange={(val) => setAnswers((prev) => ({ ...prev, [q.id]: val }))}
                 />
               </div>
             ))}
@@ -316,30 +275,15 @@ function ClientView() {
           <h3>Контактні дані</h3>
           <div className="form-group">
             <label>Імʼя *</label>
-            <input
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              placeholder="Як до вас звертатись"
-            />
+            <input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Як до вас звертатись" />
           </div>
           <div className="form-group">
             <label>Телефон / месенджер</label>
-            <input
-              value={clientContact}
-              onChange={(e) => setClientContact(e.target.value)}
-              placeholder="+380…"
-            />
+            <input value={clientContact} onChange={(e) => setClientContact(e.target.value)} placeholder="+380…" />
           </div>
-
           <div className="actions">
-            <button className="btn-secondary" onClick={() => setStep(1)}>
-              ← Назад
-            </button>
-            <button
-              className="btn-primary"
-              onClick={handleSubmit}
-              disabled={loading}
-            >
+            <button className="btn-secondary" onClick={() => setStep(1)}>← Назад</button>
+            <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
               {loading ? 'Відправляю...' : 'Відправити заявку'}
             </button>
           </div>
@@ -349,137 +293,81 @@ function ClientView() {
   )
 }
 
-/* ────────────────────────────────────────────────────────────── */
-/* ВИКОНАВЕЦЬ: список заявок, прийняття в роботу                  */
-/* ────────────────────────────────────────────────────────────── */
+/* ── ВИКОНАВЕЦЬ ── */
 function ContractorView() {
   const [orders, setOrders] = useState([])
   const [filter, setFilter] = useState('new')
   const [selected, setSelected] = useState(null)
-  const [contractorName, setContractorName] = useState(
-    localStorage.getItem('contractor_name') || ''
-  )
+  const [contractorName, setContractorName] = useState(localStorage.getItem('contractor_name') || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
   const load = () => {
     setLoading(true)
-    api
-      .listOrders(filter === 'all' ? null : filter)
+    api.listOrders(filter === 'all' ? null : filter)
       .then(setOrders)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => {
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter])
+  useEffect(() => { load() }, [filter])
 
   const handleAccept = async (orderId) => {
-    if (!contractorName.trim()) {
-      setError('Спочатку введіть ваше імʼя')
-      return
-    }
+    if (!contractorName.trim()) { setError('Спочатку введіть ваше імʼя'); return }
     localStorage.setItem('contractor_name', contractorName)
-    try {
-      const updated = await api.acceptOrder(orderId, contractorName)
-      setSelected(updated)
-      load()
-    } catch (e) {
-      setError(e.message)
-    }
+    try { const u = await api.acceptOrder(orderId, contractorName); setSelected(u); load() }
+    catch (e) { setError(e.message) }
   }
 
   const handleComplete = async (orderId) => {
-    try {
-      const updated = await api.completeOrder(orderId)
-      setSelected(updated)
-      load()
-    } catch (e) {
-      setError(e.message)
-    }
+    try { const u = await api.completeOrder(orderId); setSelected(u); load() }
+    catch (e) { setError(e.message) }
   }
 
   if (selected) {
     return (
       <div className="card">
-        <button className="btn-link" onClick={() => setSelected(null)}>
-          ← До списку
-        </button>
+        <button className="btn-link" onClick={() => setSelected(null)}>← До списку</button>
         <div className="order-detail-header">
-          <h2>
-            Заявка #{selected.id} — {selected.service_name}
-          </h2>
-          <span className={`badge badge-${selected.status}`}>
-            {statusLabel(selected.status)}
-          </span>
+          <h2>Заявка #{selected.id} — {selected.service_name}</h2>
+          <span className={`badge badge-${selected.status}`}>{statusLabel(selected.status)}</span>
         </div>
-
         <div className="info-grid">
-          <div>
-            <strong>Клієнт:</strong> {selected.client_name}
-          </div>
-          <div>
-            <strong>Контакт:</strong> {selected.client_contact || '—'}
-          </div>
-          <div>
-            <strong>Створено:</strong>{' '}
-            {new Date(selected.created_at).toLocaleString('uk-UA')}
-          </div>
-          {selected.contractor_name && (
-            <div>
-              <strong>Виконавець:</strong> {selected.contractor_name}
-            </div>
-          )}
+          <div><strong>Клієнт:</strong> {selected.client_name}</div>
+          <div><strong>Контакт:</strong> {selected.client_contact || '—'}</div>
+          <div><strong>Створено:</strong> {new Date(selected.created_at).toLocaleString('uk-UA')}</div>
+          {selected.contractor_name && <div><strong>Виконавець:</strong> {selected.contractor_name}</div>}
         </div>
-
         {selected.description && (
           <div className="block">
             <h3>Опис від клієнта</h3>
             <p>{selected.description}</p>
           </div>
         )}
-
         <div className="block">
           <h3>Відповіді на уточнюючі питання</h3>
           {selected.questions.map((q) => (
             <div key={q.id} className="qa">
               <div className="q">{q.label}</div>
               <div className="a">
-                {selected.answers[q.id] ? (
-                  String(selected.answers[q.id])
-                ) : (
-                  <em className="muted">— не відповіли —</em>
-                )}
+                {selected.answers[q.id]
+                  ? String(selected.answers[q.id])
+                  : <em className="muted">— не відповіли —</em>}
               </div>
             </div>
           ))}
         </div>
-
         {error && <div className="error">{error}</div>}
-
         {selected.status === 'new' && (
           <div className="actions">
-            <button
-              className="btn-primary"
-              onClick={() => handleAccept(selected.id)}
-            >
-              Прийняти в роботу
-            </button>
+            <button className="btn-primary" onClick={() => handleAccept(selected.id)}>Прийняти в роботу</button>
           </div>
         )}
-        {selected.status === 'accepted' &&
-          selected.contractor_name === contractorName && (
-            <div className="actions">
-              <button
-                className="btn-primary"
-                onClick={() => handleComplete(selected.id)}
-              >
-                Позначити виконаною
-              </button>
-            </div>
-          )}
+        {selected.status === 'accepted' && selected.contractor_name === contractorName && (
+          <div className="actions">
+            <button className="btn-primary" onClick={() => handleComplete(selected.id)}>Позначити виконаною</button>
+          </div>
+        )}
       </div>
     )
   }
@@ -490,58 +378,28 @@ function ContractorView() {
         <label>Ваше імʼя як виконавця</label>
         <input
           value={contractorName}
-          onChange={(e) => {
-            setContractorName(e.target.value)
-            localStorage.setItem('contractor_name', e.target.value)
-          }}
+          onChange={(e) => { setContractorName(e.target.value); localStorage.setItem('contractor_name', e.target.value) }}
           placeholder="Напр.: Іван Петренко"
         />
       </div>
-
       <div className="filters">
-        {[
-          ['new', 'Нові'],
-          ['accepted', 'В роботі'],
-          ['done', 'Виконані'],
-          ['all', 'Всі'],
-        ].map(([f, label]) => (
-          <button
-            key={f}
-            className={`filter ${filter === f ? 'active' : ''}`}
-            onClick={() => setFilter(f)}
-          >
-            {label}
-          </button>
+        {[['new','Нові'],['accepted','В роботі'],['done','Виконані'],['all','Всі']].map(([f, label]) => (
+          <button key={f} className={`filter ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>{label}</button>
         ))}
-        <button className="filter" onClick={load} title="Оновити">
-          ↻
-        </button>
+        <button className="filter" onClick={load} title="Оновити">↻</button>
       </div>
-
       {error && <div className="error">{error}</div>}
       {loading && <p className="muted">Завантаження...</p>}
-
       <div className="orders-list">
-        {orders.length === 0 && !loading && (
-          <p className="muted">Заявок поки немає</p>
-        )}
+        {orders.length === 0 && !loading && <p className="muted">Заявок поки немає</p>}
         {orders.map((o) => (
-          <div
-            key={o.id}
-            className="order-card"
-            onClick={() => setSelected(o)}
-          >
+          <div key={o.id} className="order-card" onClick={() => setSelected(o)}>
             <div className="order-header">
-              <div className="order-title">
-                #{o.id} — {o.service_name}
-              </div>
-              <span className={`badge badge-${o.status}`}>
-                {statusLabel(o.status)}
-              </span>
+              <div className="order-title">#{o.id} — {o.service_name}</div>
+              <span className={`badge badge-${o.status}`}>{statusLabel(o.status)}</span>
             </div>
             <div className="order-meta">
-              Клієнт: {o.client_name} •{' '}
-              {new Date(o.created_at).toLocaleDateString('uk-UA')}
+              Клієнт: {o.client_name} • {new Date(o.created_at).toLocaleDateString('uk-UA')}
               {o.contractor_name && ` • Виконавець: ${o.contractor_name}`}
             </div>
             {o.description && <div className="order-desc">{o.description}</div>}
