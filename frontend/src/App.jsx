@@ -1,455 +1,295 @@
-import { useState, useEffect } from 'react'
-import { api } from './api'
+import { useState, useEffect } from "react"
+import { api } from "./api"
+
+const SCREENS = {
+  ROLE: "role",
+  DESCRIBE: "describe",
+  CLARIFY: "clarify",
+  QUESTIONS: "questions",
+  CONTACT: "contact",
+  DONE: "done",
+  CONTRACTOR: "contractor",
+  ORDER_DETAIL: "order_detail",
+}
 
 export default function App() {
-  const [role, setRole] = useState('client')
-
-  return (
-    <div className="app">
-      <header className="header">
-        <h1>🔧 Repair Services</h1>
-        <div className="role-toggle">
-          <button className={role === 'client' ? 'active' : ''} onClick={() => setRole('client')}>Клієнт</button>
-          <button className={role === 'contractor' ? 'active' : ''} onClick={() => setRole('contractor')}>Виконавець</button>
-        </div>
-      </header>
-      <main className="container">
-        {role === 'client' ? <ClientView /> : <ContractorView />}
-      </main>
-    </div>
-  )
-}
-
-/* ── Рендер поля питання за типом ── */
-function QuestionField({ q, value, onChange }) {
-  const val = value ?? ''
-
-  if (q.type === 'yesno') {
-    return (
-      <div style={{ display: 'flex', gap: 12 }}>
-        {['Так', 'Ні'].map((opt) => {
-          const selected = val === opt
-          return (
-            <label
-              key={opt}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '10px 24px',
-                borderRadius: 8,
-                border: `2px solid ${selected ? '#2563eb' : '#d1d5db'}`,
-                background: selected ? '#eff6ff' : '#fff',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-                userSelect: 'none',
-                minWidth: 90,
-              }}
-            >
-              {/* кастомний радіо-кружок */}
-              <span style={{
-                width: 18,
-                height: 18,
-                borderRadius: '50%',
-                border: `2px solid ${selected ? '#2563eb' : '#9ca3af'}`,
-                background: selected ? '#2563eb' : '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                transition: 'all 0.15s',
-              }}>
-                {selected && (
-                  <span style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: '50%',
-                    background: '#fff',
-                    display: 'block',
-                  }} />
-                )}
-              </span>
-              <input
-                type="radio"
-                name={q.id}
-                value={opt}
-                checked={selected}
-                onChange={() => onChange(opt)}
-                style={{ display: 'none' }}
-              />
-              <span style={{
-                fontSize: 15,
-                fontWeight: selected ? 600 : 400,
-                color: selected ? '#2563eb' : '#374151',
-              }}>
-                {opt}
-              </span>
-            </label>
-          )
-        })}
-      </div>
-    )
-  }
-
-  if (q.type === 'select_other') {
-    const options = q.options || []
-    const isOther = val !== '' && !options.includes(val)
-    const selectVal = isOther ? '__other__' : val
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <select
-          className="form-control"
-          value={selectVal}
-          onChange={(e) => {
-            if (e.target.value === '__other__') onChange('')
-            else onChange(e.target.value)
-          }}
-          style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', background: 'white' }}
-        >
-          <option value="">— Оберіть —</option>
-          {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-          <option value="__other__">Інше (вказати)</option>
-        </select>
-        {(selectVal === '__other__') && (
-          <input
-            type="text"
-            placeholder="Вкажіть свій варіант"
-            value={isOther ? val : ''}
-            onChange={(e) => onChange(e.target.value)}
-            style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontFamily: 'inherit' }}
-          />
-        )}
-      </div>
-    )
-  }
-
-  if (q.type === 'select') {
-    return (
-      <select
-        value={val}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', background: 'white' }}
-      >
-        <option value="">— Оберіть —</option>
-        {(q.options || []).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-      </select>
-    )
-  }
-
-  if (q.type === 'textarea') {
-    return (
-      <textarea
-        rows={3}
-        value={val}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', minHeight: 70 }}
-      />
-    )
-  }
-
-  if (q.type === 'number') {
-    return (
-      <input
-        type="number"
-        value={val}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontFamily: 'inherit' }}
-      />
-    )
-  }
-
-  // text + будь-який невідомий тип
-  return (
-    <input
-      type="text"
-      value={val}
-      onChange={(e) => onChange(e.target.value)}
-      style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontFamily: 'inherit' }}
-    />
-  )
-}
-
-/* ── КЛІЄНТ ── */
-function ClientView() {
-  const [services, setServices] = useState([])
-  const [step, setStep] = useState(1)
-  const [selectedService, setSelectedService] = useState(null)
-  const [description, setDescription] = useState('')
+  const [screen, setScreen] = useState(SCREENS.ROLE)
+  const [description, setDescription] = useState("")
+  const [clarificationQ, setClarificationQ] = useState("")
+  const [clarificationA, setClarificationA] = useState("")
+  const [service, setService] = useState(null)
   const [questions, setQuestions] = useState([])
   const [answers, setAnswers] = useState({})
-  const [clientName, setClientName] = useState('')
-  const [clientContact, setClientContact] = useState('')
+  const [contact, setContact] = useState({ name: "", phone: "" })
+  const [orders, setOrders] = useState([])
+  const [selectedOrder, setSelectedOrder] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(null)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState("")
 
-  useEffect(() => {
-    api.getServices().then(setServices).catch((e) => setError(e.message))
-  }, [])
-
-  const handleGenerate = async () => {
-    if (!selectedService) return
+  async function handleDescribe() {
+    if (!description.trim()) return
     setLoading(true)
-    setError(null)
+    setError("")
     try {
-      const r = await api.generateQuestions(selectedService.id, description)
-      setQuestions(r.questions)
-      setAnswers({})
-      setStep(2)
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
+      const res = await api.post("/classify", { description })
+      if (res.status === "classified") {
+        setService({ id: res.service_id, name: res.service_name })
+        await loadQuestions(res.service_id)
+      } else {
+        setClarificationQ(res.clarification_question)
+        setScreen(SCREENS.CLARIFY)
+      }
+    } catch {
+      setError("Помилка з'єднання. Спробуйте ще раз.")
     }
+    setLoading(false)
   }
 
-  const handleSubmit = async () => {
-    if (!clientName.trim()) { setError('Введіть ваше імʼя'); return }
+  async function handleClarify() {
+    if (!clarificationA.trim()) return
     setLoading(true)
-    setError(null)
+    setError("")
     try {
-      const order = await api.createOrder({
-        service_id: selectedService.id,
-        client_name: clientName,
-        client_contact: clientContact,
+      const res = await api.post("/classify", {
         description,
-        questions,
-        answers,
+        clarification_answer: clarificationA,
       })
-      setSuccess(order)
-      setStep(3)
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
+      if (res.status === "classified") {
+        setService({ id: res.service_id, name: res.service_name })
+        await loadQuestions(res.service_id)
+      } else {
+        setError("Не вдалося визначити сервіс. Спробуйте описати детальніше.")
+        setScreen(SCREENS.DESCRIBE)
+      }
+    } catch {
+      setError("Помилка з'єднання.")
     }
+    setLoading(false)
   }
 
-  const reset = () => {
-    setStep(1); setSelectedService(null); setDescription(''); setQuestions([])
-    setAnswers({}); setClientName(''); setClientContact(''); setSuccess(null); setError(null)
+  async function loadQuestions(serviceId) {
+    const qs = await api.post("/questions/generate", {
+      service_id: serviceId,
+      description,
+    })
+    setQuestions(qs.questions || qs)
+    setScreen(SCREENS.QUESTIONS)
   }
 
-  if (step === 3 && success) {
+  async function handleSubmit() {
+    setLoading(true)
+    try {
+      await api.post("/orders", {
+        service_id: service.id,
+        description,
+        answers,
+        client_name: contact.name,
+        client_phone: contact.phone,
+      })
+      setScreen(SCREENS.DONE)
+    } catch {
+      setError("Помилка при відправці.")
+    }
+    setLoading(false)
+  }
+
+  async function loadOrders() {
+    const data = await api.get("/orders")
+    setOrders(data)
+  }
+
+  async function acceptOrder(id) {
+    await api.post(`/orders/${id}/accept`)
+    loadOrders()
+  }
+
+  async function completeOrder(id) {
+    await api.post(`/orders/${id}/complete`)
+    setSelectedOrder(null)
+    loadOrders()
+  }
+
+  function reset() {
+    setScreen(SCREENS.DESCRIBE)
+    setDescription("")
+    setClarificationA("")
+    setClarificationQ("")
+    setService(null)
+    setQuestions([])
+    setAnswers({})
+    setContact({ name: "", phone: "" })
+    setError("")
+  }
+
+  if (screen === SCREENS.ROLE) {
     return (
-      <div className="card success">
-        <div className="success-icon">✅</div>
-        <h2>Заявка створена</h2>
-        <p>Номер заявки: <strong>#{success.id}</strong></p>
-        <p className="muted">Очікуйте, поки виконавець прийме її в роботу.</p>
-        <button className="btn-primary" onClick={reset}>Створити ще одну</button>
+      <div className="center">
+        <h1>Repair Services</h1>
+        <button onClick={() => setScreen(SCREENS.DESCRIBE)}>Я клієнт</button>
+        <button onClick={() => { setScreen(SCREENS.CONTRACTOR); loadOrders() }}>
+          Я виконавець
+        </button>
       </div>
     )
   }
 
-  return (
-    <>
-      <div className="steps">
-        <div className={`step ${step >= 1 ? 'active' : ''}`}>1. Сервіс</div>
-        <div className={`step ${step >= 2 ? 'active' : ''}`}>2. Деталі</div>
-        <div className={`step ${step >= 3 ? 'active' : ''}`}>3. Готово</div>
-      </div>
-
-      {error && <div className="error">{error}</div>}
-
-      {step === 1 && (
-        <div className="card">
-          <h2>Оберіть сервіс</h2>
-          <div className="service-grid">
-            {services.map((s) => (
-              <div
-                key={s.id}
-                className={`service-card ${selectedService?.id === s.id ? 'selected' : ''}`}
-                onClick={() => setSelectedService(s)}
-              >
-                <div className="service-name">{s.name}</div>
-                <div className="service-desc">{s.description}</div>
-                <div className="service-cat">{s.category}</div>
-              </div>
-            ))}
-          </div>
-          {selectedService && (
-            <>
-              <hr />
-              <div className="form-group">
-                <label>Коротко опишіть проблему (опціонально)</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Напр.: тече кран на кухні"
-                  rows={3}
-                />
-              </div>
-              <div className="actions">
-                <button className="btn-primary" onClick={handleGenerate} disabled={loading}>
-                  {loading ? '⏳ Генерую питання...' : 'Далі →'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {step === 2 && (
-        <div className="card">
-          <h2>Уточнення по «{selectedService.name}»</h2>
-          <p className="muted">AI згенерував питання, відповіді на які допоможуть виконавцю.</p>
-
-          <div className="questions">
-            {questions.map((q) => (
-              <div key={q.id} className="form-group">
-                <label>
-                  {q.label}
-                  {q.required && <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>}
-                </label>
-                <QuestionField
-                  q={q}
-                  value={answers[q.id]}
-                  onChange={(val) => setAnswers((prev) => ({ ...prev, [q.id]: val }))}
-                />
-              </div>
-            ))}
-          </div>
-
-          <hr />
-          <h3>Контактні дані</h3>
-          <div className="form-group">
-            <label>Імʼя *</label>
-            <input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Як до вас звертатись" />
-          </div>
-          <div className="form-group">
-            <label>Телефон / месенджер</label>
-            <input value={clientContact} onChange={(e) => setClientContact(e.target.value)} placeholder="+380…" />
-          </div>
-          <div className="actions">
-            <button className="btn-secondary" onClick={() => setStep(1)}>← Назад</button>
-            <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
-              {loading ? 'Відправляю...' : 'Відправити заявку'}
-            </button>
-          </div>
-        </div>
-      )}
-    </>
-  )
-}
-
-/* ── ВИКОНАВЕЦЬ ── */
-function ContractorView() {
-  const [orders, setOrders] = useState([])
-  const [filter, setFilter] = useState('new')
-  const [selected, setSelected] = useState(null)
-  const [contractorName, setContractorName] = useState(localStorage.getItem('contractor_name') || '')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
-  const load = () => {
-    setLoading(true)
-    api.listOrders(filter === 'all' ? null : filter)
-      .then(setOrders)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => { load() }, [filter])
-
-  const handleAccept = async (orderId) => {
-    if (!contractorName.trim()) { setError('Спочатку введіть ваше імʼя'); return }
-    localStorage.setItem('contractor_name', contractorName)
-    try { const u = await api.acceptOrder(orderId, contractorName); setSelected(u); load() }
-    catch (e) { setError(e.message) }
-  }
-
-  const handleComplete = async (orderId) => {
-    try { const u = await api.completeOrder(orderId); setSelected(u); load() }
-    catch (e) { setError(e.message) }
-  }
-
-  if (selected) {
+  if (screen === SCREENS.DESCRIBE) {
     return (
       <div className="card">
-        <button className="btn-link" onClick={() => setSelected(null)}>← До списку</button>
-        <div className="order-detail-header">
-          <h2>Заявка #{selected.id} — {selected.service_name}</h2>
-          <span className={`badge badge-${selected.status}`}>{statusLabel(selected.status)}</span>
-        </div>
-        <div className="info-grid">
-          <div><strong>Клієнт:</strong> {selected.client_name}</div>
-          <div><strong>Контакт:</strong> {selected.client_contact || '—'}</div>
-          <div><strong>Створено:</strong> {new Date(selected.created_at).toLocaleString('uk-UA')}</div>
-          {selected.contractor_name && <div><strong>Виконавець:</strong> {selected.contractor_name}</div>}
-        </div>
-        {selected.description && (
-          <div className="block">
-            <h3>Опис від клієнта</h3>
-            <p>{selected.description}</p>
-          </div>
-        )}
-        <div className="block">
-          <h3>Відповіді на уточнюючі питання</h3>
-          {selected.questions.map((q) => (
-            <div key={q.id} className="qa">
-              <div className="q">{q.label}</div>
-              <div className="a">
-                {selected.answers[q.id]
-                  ? String(selected.answers[q.id])
-                  : <em className="muted">— не відповіли —</em>}
-              </div>
-            </div>
-          ))}
-        </div>
-        {error && <div className="error">{error}</div>}
-        {selected.status === 'new' && (
-          <div className="actions">
-            <button className="btn-primary" onClick={() => handleAccept(selected.id)}>Прийняти в роботу</button>
-          </div>
-        )}
-        {selected.status === 'accepted' && selected.contractor_name === contractorName && (
-          <div className="actions">
-            <button className="btn-primary" onClick={() => handleComplete(selected.id)}>Позначити виконаною</button>
-          </div>
-        )}
+        <h2>Опишіть вашу проблему</h2>
+        <p className="hint">AI сама визначить потрібний сервіс</p>
+        <textarea
+          rows={4}
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          placeholder="Наприклад: тече кран на кухні, не вмикається холодильник..."
+        />
+        {error && <p className="error">{error}</p>}
+        <button onClick={handleDescribe} disabled={loading || !description.trim()}>
+          {loading ? "Визначаємо сервіс..." : "Далі →"}
+        </button>
+        <button className="back" onClick={() => setScreen(SCREENS.ROLE)}>← Назад</button>
       </div>
     )
   }
 
-  return (
-    <div className="card">
-      <div className="form-group">
-        <label>Ваше імʼя як виконавця</label>
+  if (screen === SCREENS.CLARIFY) {
+    return (
+      <div className="card">
+        <h2>Уточнення</h2>
+        <p className="hint">AI не впевнена. Допоможіть уточнити:</p>
+        <p className="question">{clarificationQ}</p>
         <input
-          value={contractorName}
-          onChange={(e) => { setContractorName(e.target.value); localStorage.setItem('contractor_name', e.target.value) }}
-          placeholder="Напр.: Іван Петренко"
+          value={clarificationA}
+          onChange={e => setClarificationA(e.target.value)}
+          placeholder="Ваша відповідь..."
         />
+        {error && <p className="error">{error}</p>}
+        <button onClick={handleClarify} disabled={loading || !clarificationA.trim()}>
+          {loading ? "Визначаємо..." : "Далі →"}
+        </button>
+        <button className="back" onClick={() => setScreen(SCREENS.DESCRIBE)}>← Назад</button>
       </div>
-      <div className="filters">
-        {[['new','Нові'],['accepted','В роботі'],['done','Виконані'],['all','Всі']].map(([f, label]) => (
-          <button key={f} className={`filter ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>{label}</button>
-        ))}
-        <button className="filter" onClick={load} title="Оновити">↻</button>
-      </div>
-      {error && <div className="error">{error}</div>}
-      {loading && <p className="muted">Завантаження...</p>}
-      <div className="orders-list">
-        {orders.length === 0 && !loading && <p className="muted">Заявок поки немає</p>}
-        {orders.map((o) => (
-          <div key={o.id} className="order-card" onClick={() => setSelected(o)}>
-            <div className="order-header">
-              <div className="order-title">#{o.id} — {o.service_name}</div>
-              <span className={`badge badge-${o.status}`}>{statusLabel(o.status)}</span>
-            </div>
-            <div className="order-meta">
-              Клієнт: {o.client_name} • {new Date(o.created_at).toLocaleDateString('uk-UA')}
-              {o.contractor_name && ` • Виконавець: ${o.contractor_name}`}
-            </div>
-            {o.description && <div className="order-desc">{o.description}</div>}
+    )
+  }
+
+  if (screen === SCREENS.QUESTIONS) {
+    return (
+      <div className="card">
+        <h2>{service?.name}</h2>
+        <p className="hint">Кілька питань для уточнення:</p>
+        {questions.map(q => (
+          <div key={q.id} className="field">
+            <label>{q.label}</label>
+            {q.type === "textarea" ? (
+              <textarea
+                rows={3}
+                value={answers[q.id] || ""}
+                onChange={e => setAnswers({ ...answers, [q.id]: e.target.value })}
+              />
+            ) : q.type === "select" ? (
+              <select
+                value={answers[q.id] || ""}
+                onChange={e => setAnswers({ ...answers, [q.id]: e.target.value })}
+              >
+                <option value="">— оберіть —</option>
+                {(q.options || []).map(o => <option key={o}>{o}</option>)}
+              </select>
+            ) : (
+              <input
+                type={q.type === "number" ? "number" : "text"}
+                value={answers[q.id] || ""}
+                onChange={e => setAnswers({ ...answers, [q.id]: e.target.value })}
+              />
+            )}
           </div>
         ))}
+        <button onClick={() => setScreen(SCREENS.CONTACT)}>Далі →</button>
+        <button className="back" onClick={reset}>← Спочатку</button>
       </div>
-    </div>
-  )
-}
+    )
+  }
 
-function statusLabel(s) {
-  return { new: 'Нова', accepted: 'В роботі', done: 'Виконана' }[s] || s
+  if (screen === SCREENS.CONTACT) {
+    return (
+      <div className="card">
+        <h2>Контактні дані</h2>
+        <div className="field">
+          <label>Ім'я</label>
+          <input value={contact.name} onChange={e => setContact({ ...contact, name: e.target.value })} />
+        </div>
+        <div className="field">
+          <label>Телефон</label>
+          <input value={contact.phone} onChange={e => setContact({ ...contact, phone: e.target.value })} />
+        </div>
+        {error && <p className="error">{error}</p>}
+        <button onClick={handleSubmit} disabled={loading}>
+          {loading ? "Відправляємо..." : "Відправити заявку"}
+        </button>
+        <button className="back" onClick={() => setScreen(SCREENS.QUESTIONS)}>← Назад</button>
+      </div>
+    )
+  }
+
+  if (screen === SCREENS.DONE) {
+    return (
+      <div className="center">
+        <h2>✓ Заявку прийнято</h2>
+        <p>Виконавець зв'яжеться з вами найближчим часом.</p>
+        <button onClick={reset}>Нова заявка</button>
+        <button className="back" onClick={() => setScreen(SCREENS.ROLE)}>На початок</button>
+      </div>
+    )
+  }
+
+  if (screen === SCREENS.CONTRACTOR) {
+    return (
+      <div className="card">
+        <h2>Заявки</h2>
+        <button className="refresh" onClick={loadOrders}>↻ Оновити</button>
+        {orders.length === 0 && <p>Немає заявок</p>}
+        {orders.map(o => (
+          <div
+            key={o.id}
+            className={`order-item status-${o.status}`}
+            onClick={() => setSelectedOrder(o) || setScreen(SCREENS.ORDER_DETAIL)}
+          >
+            <strong>{o.service_name || o.service_id}</strong>
+            <span className="badge">{o.status}</span>
+            <br />
+            <small>{o.client_name} · {o.client_phone}</small>
+          </div>
+        ))}
+        <button className="back" onClick={() => setScreen(SCREENS.ROLE)}>← Назад</button>
+      </div>
+    )
+  }
+
+  if (screen === SCREENS.ORDER_DETAIL && selectedOrder) {
+    const o = selectedOrder
+    return (
+      <div className="card">
+        <h2>Заявка #{o.id}</h2>
+        <p><strong>Сервіс:</strong> {o.service_name || o.service_id}</p>
+        <p><strong>Опис:</strong> {o.description}</p>
+        <p><strong>Клієнт:</strong> {o.client_name}, {o.client_phone}</p>
+        <p><strong>Статус:</strong> {o.status}</p>
+        {o.answers && (
+          <div>
+            <strong>Відповіді:</strong>
+            <pre>{JSON.stringify(JSON.parse(o.answers || "{}"), null, 2)}</pre>
+          </div>
+        )}
+        {o.status === "new" && (
+          <button onClick={() => acceptOrder(o.id)}>Прийняти в роботу</button>
+        )}
+        {o.status === "in_progress" && (
+          <button onClick={() => completeOrder(o.id)}>Позначити виконаною</button>
+        )}
+        <button className="back" onClick={() => { setSelectedOrder(null); setScreen(SCREENS.CONTRACTOR) }}>← Назад</button>
+      </div>
+    )
+  }
+
+  return null
 }

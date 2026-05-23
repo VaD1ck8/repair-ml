@@ -1,85 +1,103 @@
 import os
 import json
-import traceback
-from groq import AsyncGroq
-from dotenv import load_dotenv
+import re
+from anthropic import Anthropic
 
-load_dotenv()
+client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
 
-async def generate_questions(service_name: str, description: str = "") -> list[dict]:
-    api_key = os.getenv("GROQ_API_KEY")
-    
-    print(f"[DEBUG] GROQ_API_KEY present: {bool(api_key)}")
-    print(f"[DEBUG] GROQ_API_KEY prefix: {api_key[:10] if api_key else 'NONE'}")
-    print(f"[DEBUG] service_name: {service_name}")
-    
-    if not api_key:
-        print("[ERROR] GROQ_API_KEY is not set!")
-        return _fallback(error="GROQ_API_KEY not set")
-
-    try:
-        client = AsyncGroq(api_key=api_key)
-
-        prompt = f"""
-Ти — асистент для сервісу ремонту. Згенеруй 6-8 уточнюючих питань для заявки.
-Сервіс: {service_name}
-Опис проблеми: {description or "не вказано"}
-
-Відповідай ТІЛЬКИ валідним JSON масивом без жодного тексту до або після. Без markdown.
-Формат — кожен елемент ОБОВ'ЯЗКОВО має поля id, label, type, required.
-
-Правила для типів:
-- "yesno" — питання з відповіддю Так/Ні
-- "select_other" — список варіантів + "Інше (вказати)" де юзер пише своє
-- "select" — список варіантів без поля "інше"
-- "textarea" — вільний текст
-- "text" — короткий текст
-- "number" — число
-
-Приклад:
-[
-  {{"id": "q1", "label": "Проблема виникла вперше?", "type": "yesno", "required": true}},
-  {{"id": "q2", "label": "Що саме не працює?", "type": "select_other", "options": ["Розетка", "Вимикач", "Проводка"], "required": true}},
-  {{"id": "q3", "label": "Коли виникла проблема?", "type": "select", "options": ["Сьогодні", "Кілька днів тому", "Тиждень і більше"], "required": true}},
-  {{"id": "q4", "label": "Опишіть детальніше", "type": "textarea", "required": false}}
+FALLBACK_QUESTIONS = [
+    {"id": "q1", "label": "Опишіть проблему детальніше", "type": "textarea"},
+    {"id": "q2", "label": "Коли виникла проблема?", "type": "text"},
+    {"id": "q3", "label": "Ваш бюджет (грн)", "type": "number"},
+    {"id": "q4", "label": "Зручний час для майстра", "type": "text"},
 ]
 
-Генеруй питання максимально релевантні до сервісу "{service_name}".
+
+def _call_llm(prompt: str) -> str:
+    msg = client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=512,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return msg.content[0].text.strip()
+
+
+def classify_service(description: str, services: list[dict]) -> dict:
+    service_lines = "\n".join(
+        f"  {s['id']}. {s['name']} — {s['description']}" for s in services
+    )
+    prompt = f"""Ти — класифікатор заявок сервісного маркетплейсу.
+
+Список категорій:
+{service_lines}
+
+Заявка клієнта: «{description}»
+
+Твоє завдання:
+1. Якщо заявка чітко відповідає одній з категорій — відповідай JSON:
+   {{"status": "classified", "service_id": <id>, "service_name": "<назва>", "confidence": <0.0-1.0>}}
+
+2. Якщо незрозуміло яка категорія — відповідай JSON:
+   {{"status": "needs_clarification", "clarification_question": "<одне коротке питання>"}}
+
+Правила:
+- confidence >= 0.75 → classified
+- confidence < 0.75 → needs_clarification
+- Відповідай ТІЛЬКИ JSON, без пояснень і markdown.
 """
+    try:
+        raw = _call_llm(prompt)
+        raw = re.sub(r"```json|```", "", raw).strip()
+        data = json.loads(raw)
+        if data.get("status") == "classified":
+            return {
+                "status": "classified",
+                "service_id": data["service_id"],
+                "service_name": data["service_name"],
+                "confidence": data.get("confidence", 0.9),
+                "clarification_question": None,
+            }
+        return {
+            "status": "needs_clarification",
+            "service_id": None,
+            "service_name": None,
+            "confidence": None,
+            "clarification_question": data.get(
+                "clarification_question", "Уточніть, будь ласка, що саме потрібно відремонтувати?"
+            ),
+        }
+    except Exception:
+        return {
+            "status": "needs_clarification",
+            "service_id": None,
+            "service_name": None,
+            "confidence": None,
+            "clarification_question": "Уточніть, будь ласка, що саме потрібно відремонтувати?",
+        }
 
-        print("[DEBUG] Sending request to Groq...")
-        response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-        )
-        print("[DEBUG] Got response from Groq!")
 
-        text = response.choices[0].message.content.strip()
-        print(f"[DEBUG] Raw response: {text[:200]}")
+def generate_questions(service_name: str, description: str) -> list[dict]:
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        return FALLBACK_QUESTIONS
 
-        if "```" in text:
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-            text = text.strip()
+    prompt = f"""Ти — помічник сервісного маркетплейсу.
+Сервіс: «{service_name}»
+Опис проблеми клієнта: «{description}»
 
-        questions = json.loads(text)
-        print(f"[DEBUG] Parsed {len(questions)} questions successfully")
-        return questions
-
-    except Exception as e:
-        print(f"[ERROR] Groq error type: {type(e).__name__}")
-        print(f"[ERROR] Groq error message: {e}")
-        traceback.print_exc()
-        return _fallback(error=str(e))
-
-
-def _fallback(error: str = "") -> list[dict]:
-    if error:
-        print(f"[FALLBACK] Returning fallback due to: {error}")
-    return [
-        {"id": "q1", "label": "Опишіть проблему детальніше", "type": "textarea", "required": True},
-        {"id": "q2", "label": "Коли виникла проблема?", "type": "text", "required": True},
-        {"id": "q3", "label": "Ваш телефон для зв'язку", "type": "text", "required": True},
-    ]
+Згенеруй 4-6 уточнюючих питань для клієнта у форматі JSON-масиву:
+[
+  {{"id": "q1", "label": "Питання", "type": "text|textarea|select|number",
+    "options": ["варіант1", "варіант2"]}}
+]
+"options" — тільки для type=select.
+Відповідай ТІЛЬКИ JSON-масивом без markdown.
+"""
+    try:
+        raw = _call_llm(prompt)
+        raw = re.sub(r"```json|```", "", raw).strip()
+        questions = json.loads(raw)
+        if isinstance(questions, list) and questions:
+            return questions
+    except Exception:
+        pass
+    return FALLBACK_QUESTIONS
