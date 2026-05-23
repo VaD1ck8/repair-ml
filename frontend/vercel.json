@@ -1,5 +1,11 @@
 {
   "buildCommand": "npm ci && npm run build",
   "outputDirectory": "dist",
-  "framework": "vite"
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://repair-ml-production.up.railway.app/:path*"
+    }
+  ]
 }
