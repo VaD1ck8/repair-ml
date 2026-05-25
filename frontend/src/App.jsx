@@ -1,10 +1,9 @@
 import { useState } from "react"
 import { api } from "./api"
 
-const SCREENS = {
+const S = {
   ROLE: "role",
   DESCRIBE: "describe",
-  CLARIFY: "clarify",
   QUESTIONS: "questions",
   CONTACT: "contact",
   DONE: "done",
@@ -13,11 +12,8 @@ const SCREENS = {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState(SCREENS.ROLE)
+  const [screen, setScreen] = useState(S.ROLE)
   const [description, setDescription] = useState("")
-  const [clarificationQ, setClarificationQ] = useState("")
-  const [clarificationOptions, setClarificationOptions] = useState([])
-  const [clarificationA, setClarificationA] = useState("")
   const [service, setService] = useState(null)
   const [questions, setQuestions] = useState([])
   const [answers, setAnswers] = useState({})
@@ -27,44 +23,25 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
-  async function runClassify(body) {
+  async function handleDescribe() {
+    if (!description.trim()) return
     setLoading(true)
     setError("")
     try {
-      const res = await api.post("/classify", body)
-      if (res.status === "classified") {
-        setService({ id: res.service_id, name: res.service_name })
-        const qs = await api.post("/questions/generate", {
-          service_id: res.service_id,
-          description,
-        })
-        setQuestions(qs.questions || qs)
-        setScreen(SCREENS.QUESTIONS)
-      } else {
-        setClarificationQ(res.clarification_question)
-        setClarificationOptions(res.clarification_options || [])
-        setClarificationA("")
-        setScreen(SCREENS.CLARIFY)
-      }
+      const res = await api.post("/analyze", { description })
+      setService({ id: res.service_id, name: res.service_name })
+      setQuestions(res.questions)
+      setAnswers({})
+      setScreen(S.QUESTIONS)
     } catch {
       setError("Помилка з'єднання. Спробуйте ще раз.")
     }
     setLoading(false)
   }
 
-  function handleDescribe() {
-    if (!description.trim()) return
-    runClassify({ description })
-  }
-
-  function handleClarify(answer) {
-    const a = answer || clarificationA
-    if (!a.trim()) return
-    runClassify({ description, clarification_answer: a })
-  }
-
   async function handleSubmit() {
     setLoading(true)
+    setError("")
     try {
       await api.post("/orders", {
         service_id: service.id,
@@ -73,7 +50,7 @@ export default function App() {
         client_name: contact.name,
         client_phone: contact.phone,
       })
-      setScreen(SCREENS.DONE)
+      setScreen(S.DONE)
     } catch {
       setError("Помилка при відправці.")
     }
@@ -81,27 +58,21 @@ export default function App() {
   }
 
   async function loadOrders() {
-    const data = await api.get("/orders")
-    setOrders(data)
+    try {
+      const data = await api.get("/orders")
+      setOrders(data)
+    } catch {
+      setError("Не вдалось завантажити заявки.")
+    }
   }
 
-  async function acceptOrder(id) {
-    await api.post(`/orders/${id}/accept`)
-    loadOrders()
-  }
-
-  async function completeOrder(id) {
-    await api.post(`/orders/${id}/complete`)
-    setSelectedOrder(null)
-    loadOrders()
+  function setAnswer(id, val) {
+    setAnswers(a => ({ ...a, [id]: val }))
   }
 
   function reset() {
-    setScreen(SCREENS.DESCRIBE)
+    setScreen(S.DESCRIBE)
     setDescription("")
-    setClarificationA("")
-    setClarificationQ("")
-    setClarificationOptions([])
     setService(null)
     setQuestions([])
     setAnswers({})
@@ -109,224 +80,214 @@ export default function App() {
     setError("")
   }
 
-  if (screen === SCREENS.ROLE) {
-    return (
-      <div className="center">
-        <h1>Repair Services</h1>
-        <button onClick={() => setScreen(SCREENS.DESCRIBE)}>Я клієнт</button>
-        <button onClick={() => { setScreen(SCREENS.CONTRACTOR); loadOrders() }}>
-          Я виконавець
-        </button>
-      </div>
-    )
-  }
+  // --- ROLE ---
+  if (screen === S.ROLE) return (
+    <div className="center">
+      <h1>🔧 Repair Services</h1>
+      <button onClick={() => setScreen(S.DESCRIBE)}>Я клієнт</button>
+      <button onClick={() => { setScreen(S.CONTRACTOR); loadOrders() }}>
+        Я виконавець
+      </button>
+    </div>
+  )
 
-  if (screen === SCREENS.DESCRIBE) {
-    return (
-      <div className="card">
-        <h2>Опишіть вашу проблему</h2>
-        <p className="hint">AI сама визначить потрібний сервіс</p>
-        <textarea
-          rows={4}
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          placeholder="Наприклад: тече кран на кухні, не вмикається холодильник..."
-        />
-        {error && <p className="error">{error}</p>}
-        <button onClick={handleDescribe} disabled={loading || !description.trim()}>
-          {loading ? "Визначаємо сервіс..." : "Далі →"}
-        </button>
-        <button className="back" onClick={() => setScreen(SCREENS.ROLE)}>← Назад</button>
-      </div>
-    )
-  }
+  // --- DESCRIBE ---
+  if (screen === S.DESCRIBE) return (
+    <div className="card">
+      <h2>Що сталося?</h2>
+      <p className="hint">Опишіть поломку — AI підбере потрібні питання</p>
+      <textarea
+        rows={5}
+        value={description}
+        onChange={e => setDescription(e.target.value)}
+        placeholder="Наприклад: тече кран на кухні, скрипить гальмо, не вмикається пральна машина..."
+        autoFocus
+      />
+      {error && <p className="error">{error}</p>}
+      <button onClick={handleDescribe} disabled={loading || !description.trim()}>
+        {loading ? "AI аналізує..." : "Далі →"}
+      </button>
+      <button className="back" onClick={() => setScreen(S.ROLE)}>← Назад</button>
+    </div>
+  )
 
-  if (screen === SCREENS.CLARIFY) {
-    return (
-      <div className="card">
-        <h2>Уточнення</h2>
-        <p className="question">{clarificationQ}</p>
+  // --- QUESTIONS ---
+  if (screen === S.QUESTIONS) return (
+    <div className="card">
+      <div className="service-tag">{service?.name}</div>
+      <h2>Розкажіть більше</h2>
+      <p className="hint">Це допоможе майстру краще підготуватись</p>
 
-        {clarificationOptions.length > 0 ? (
-          <div className="options">
-            {clarificationOptions.map(opt => (
-              <button
-                key={opt}
-                className={`option-btn ${clarificationA === opt ? "selected" : ""}`}
-                onClick={() => {
-                  setClarificationA(opt)
-                  handleClarify(opt)
-                }}
-                disabled={loading}
-              >
-                {opt}
-              </button>
-            ))}
-            <div className="divider">або напишіть свій варіант</div>
-            <input
-              value={clarificationA}
-              onChange={e => setClarificationA(e.target.value)}
-              placeholder="Свій варіант..."
-              onKeyDown={e => e.key === "Enter" && handleClarify()}
-            />
-            <button onClick={() => handleClarify()} disabled={loading || !clarificationA.trim()}>
-              {loading ? "Визначаємо..." : "Далі →"}
-            </button>
-          </div>
-        ) : (
-          <>
-            <input
-              value={clarificationA}
-              onChange={e => setClarificationA(e.target.value)}
-              placeholder="Ваша відповідь..."
-            />
-            <button onClick={() => handleClarify()} disabled={loading || !clarificationA.trim()}>
-              {loading ? "Визначаємо..." : "Далі →"}
-            </button>
-          </>
-        )}
+      {questions.map(q => (
+        <div key={q.id} className="field">
+          <label>{q.label}</label>
 
-        {error && <p className="error">{error}</p>}
-        <button className="back" onClick={() => setScreen(SCREENS.DESCRIBE)}>← Назад</button>
-      </div>
-    )
-  }
+          {(q.type === "yesno") && (
+            <div className="btn-group">
+              {(q.options || ["Так", "Ні"]).map(opt => (
+                <button
+                  key={opt}
+                  className={`opt ${answers[q.id] === opt ? "opt-active" : ""}`}
+                  onClick={() => setAnswer(q.id, opt)}
+                >{opt}</button>
+              ))}
+            </div>
+          )}
 
-  if (screen === SCREENS.QUESTIONS) {
-    return (
-      <div className="card">
-        <h2>{service?.name}</h2>
-        <p className="hint">Кілька питань для уточнення:</p>
-        {questions.map(q => (
-          <div key={q.id} className="field">
-            <label>{q.label}</label>
-            {q.type === "yesno" ? (
-              <div className="options">
-                {["Так", "Ні"].map(opt => (
-                  <button
-                    key={opt}
-                    className={`option-btn ${answers[q.id] === opt ? "selected" : ""}`}
-                    onClick={() => setAnswers({ ...answers, [q.id]: opt })}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            ) : q.type === "textarea" ? (
-              <textarea
-                rows={3}
-                value={answers[q.id] || ""}
-                onChange={e => setAnswers({ ...answers, [q.id]: e.target.value })}
-              />
-            ) : q.type === "select" || q.type === "select_other" ? (
-              <div className="options">
-                {(q.options || []).map(opt => (
-                  <button
-                    key={opt}
-                    className={`option-btn ${answers[q.id] === opt ? "selected" : ""}`}
-                    onClick={() => setAnswers({ ...answers, [q.id]: opt })}
-                  >
-                    {opt}
-                  </button>
-                ))}
-                <input
-                  placeholder="Інший варіант..."
-                  value={["Так","Ні",...(q.options||[])].includes(answers[q.id]) ? "" : (answers[q.id] || "")}
-                  onChange={e => setAnswers({ ...answers, [q.id]: e.target.value })}
-                />
-              </div>
-            ) : (
+          {(q.type === "select" || q.type === "select_other") && (
+            <div className="btn-group wrap">
+              {(q.options || []).map(opt => (
+                <button
+                  key={opt}
+                  className={`opt ${answers[q.id] === opt ? "opt-active" : ""}`}
+                  onClick={() => setAnswer(q.id, opt)}
+                >{opt}</button>
+              ))}
               <input
-                type={q.type === "number" ? "number" : "text"}
-                value={answers[q.id] || ""}
-                onChange={e => setAnswers({ ...answers, [q.id]: e.target.value })}
+                className="other-input"
+                placeholder="Інший варіант..."
+                value={(q.options || []).includes(answers[q.id]) ? "" : (answers[q.id] || "")}
+                onChange={e => setAnswer(q.id, e.target.value)}
               />
-            )}
-          </div>
-        ))}
-        <button onClick={() => setScreen(SCREENS.CONTACT)}>Далі →</button>
-        <button className="back" onClick={reset}>← Спочатку</button>
-      </div>
-    )
-  }
+            </div>
+          )}
 
-  if (screen === SCREENS.CONTACT) {
-    return (
-      <div className="card">
-        <h2>Контактні дані</h2>
-        <div className="field">
-          <label>Ім'я</label>
-          <input value={contact.name} onChange={e => setContact({ ...contact, name: e.target.value })} />
+          {q.type === "textarea" && (
+            <textarea
+              rows={3}
+              value={answers[q.id] || ""}
+              onChange={e => setAnswer(q.id, e.target.value)}
+            />
+          )}
+
+          {q.type === "text" && (
+            <input
+              type="text"
+              value={answers[q.id] || ""}
+              onChange={e => setAnswer(q.id, e.target.value)}
+            />
+          )}
+
+          {q.type === "number" && (
+            <input
+              type="number"
+              value={answers[q.id] || ""}
+              onChange={e => setAnswer(q.id, e.target.value)}
+            />
+          )}
         </div>
-        <div className="field">
-          <label>Телефон</label>
-          <input value={contact.phone} onChange={e => setContact({ ...contact, phone: e.target.value })} />
-        </div>
-        {error && <p className="error">{error}</p>}
-        <button onClick={handleSubmit} disabled={loading}>
-          {loading ? "Відправляємо..." : "Відправити заявку"}
-        </button>
-        <button className="back" onClick={() => setScreen(SCREENS.QUESTIONS)}>← Назад</button>
-      </div>
-    )
-  }
+      ))}
 
-  if (screen === SCREENS.DONE) {
-    return (
-      <div className="center">
-        <h2>✓ Заявку прийнято</h2>
-        <p>Виконавець зв'яжеться з вами найближчим часом.</p>
-        <button onClick={reset}>Нова заявка</button>
-        <button className="back" onClick={() => setScreen(SCREENS.ROLE)}>На початок</button>
-      </div>
-    )
-  }
+      <button onClick={() => setScreen(S.CONTACT)}>Далі →</button>
+      <button className="back" onClick={reset}>← Переписати проблему</button>
+    </div>
+  )
 
-  if (screen === SCREENS.CONTRACTOR) {
-    return (
-      <div className="card">
-        <h2>Заявки</h2>
-        <button className="refresh" onClick={loadOrders}>↻ Оновити</button>
-        {orders.length === 0 && <p>Немає заявок</p>}
-        {orders.map(o => (
+  // --- CONTACT ---
+  if (screen === S.CONTACT) return (
+    <div className="card">
+      <h2>Контактні дані</h2>
+      <div className="field">
+        <label>Ім'я</label>
+        <input
+          value={contact.name}
+          onChange={e => setContact(c => ({ ...c, name: e.target.value }))}
+          placeholder="Як до вас звертатись?"
+        />
+      </div>
+      <div className="field">
+        <label>Телефон</label>
+        <input
+          type="tel"
+          value={contact.phone}
+          onChange={e => setContact(c => ({ ...c, phone: e.target.value }))}
+          placeholder="+380..."
+        />
+      </div>
+      {error && <p className="error">{error}</p>}
+      <button
+        onClick={handleSubmit}
+        disabled={loading || !contact.name.trim() || !contact.phone.trim()}
+      >
+        {loading ? "Відправляємо..." : "Відправити заявку ✓"}
+      </button>
+      <button className="back" onClick={() => setScreen(S.QUESTIONS)}>← Назад</button>
+    </div>
+  )
+
+  // --- DONE ---
+  if (screen === S.DONE) return (
+    <div className="center">
+      <div className="done-icon">✓</div>
+      <h2>Заявку прийнято!</h2>
+      <p>Виконавець зв'яжеться з вами найближчим часом.</p>
+      <button onClick={reset}>Нова заявка</button>
+      <button className="back" onClick={() => setScreen(S.ROLE)}>На початок</button>
+    </div>
+  )
+
+  // --- CONTRACTOR ---
+  if (screen === S.CONTRACTOR) return (
+    <div className="card">
+      <h2>Заявки</h2>
+      <button className="btn-refresh" onClick={loadOrders}>↻ Оновити</button>
+      {orders.length === 0
+        ? <p className="hint">Немає заявок</p>
+        : orders.map(o => (
           <div
             key={o.id}
-            className={`order-item status-${o.status}`}
-            onClick={() => { setSelectedOrder(o); setScreen(SCREENS.ORDER_DETAIL) }}
+            className={`order-item s-${o.status}`}
+            onClick={() => { setSelectedOrder(o); setScreen(S.ORDER_DETAIL) }}
           >
-            <strong>{o.service_name || o.service_id}</strong>
-            <span className="badge">{o.status}</span>
-            <br />
+            <div className="order-top">
+              <strong>{o.service_name || "Сервіс"}</strong>
+              <span className={`badge b-${o.status}`}>{o.status}</span>
+            </div>
+            <p className="order-desc">{o.description}</p>
             <small>{o.client_name} · {o.client_phone}</small>
           </div>
-        ))}
-        <button className="back" onClick={() => setScreen(SCREENS.ROLE)}>← Назад</button>
-      </div>
-    )
-  }
+        ))
+      }
+      <button className="back" onClick={() => setScreen(S.ROLE)}>← Назад</button>
+    </div>
+  )
 
-  if (screen === SCREENS.ORDER_DETAIL && selectedOrder) {
+  // --- ORDER DETAIL ---
+  if (screen === S.ORDER_DETAIL && selectedOrder) {
     const o = selectedOrder
+    let parsedAnswers = {}
+    try { parsedAnswers = JSON.parse(o.answers || "{}") } catch {}
     return (
       <div className="card">
         <h2>Заявка #{o.id}</h2>
-        <p><strong>Сервіс:</strong> {o.service_name || o.service_id}</p>
-        <p><strong>Опис:</strong> {o.description}</p>
-        <p><strong>Клієнт:</strong> {o.client_name}, {o.client_phone}</p>
-        <p><strong>Статус:</strong> {o.status}</p>
-        {o.answers && (
-          <div>
-            <strong>Відповіді:</strong>
-            <pre>{JSON.stringify(JSON.parse(o.answers || "{}"), null, 2)}</pre>
+        <div className="detail-row"><span>Сервіс</span><strong>{o.service_name || o.service_id}</strong></div>
+        <div className="detail-row"><span>Проблема</span><strong>{o.description}</strong></div>
+        <div className="detail-row"><span>Клієнт</span><strong>{o.client_name}</strong></div>
+        <div className="detail-row"><span>Телефон</span><strong>{o.client_phone}</strong></div>
+        <div className="detail-row"><span>Статус</span><span className={`badge b-${o.status}`}>{o.status}</span></div>
+
+        {Object.keys(parsedAnswers).length > 0 && (
+          <div className="answers-block">
+            <p className="hint">Відповіді клієнта:</p>
+            {Object.entries(parsedAnswers).map(([k, v]) => (
+              <div key={k} className="answer-row">
+                <span>{k}</span><strong>{v}</strong>
+              </div>
+            ))}
           </div>
         )}
+
         {o.status === "new" && (
-          <button onClick={() => acceptOrder(o.id)}>Прийняти в роботу</button>
+          <button onClick={async () => { await api.post(`/orders/${o.id}/accept`); loadOrders(); setScreen(S.CONTRACTOR) }}>
+            Прийняти в роботу
+          </button>
         )}
         {o.status === "in_progress" && (
-          <button onClick={() => completeOrder(o.id)}>Позначити виконаною</button>
+          <button onClick={async () => { await api.post(`/orders/${o.id}/complete`); loadOrders(); setScreen(S.CONTRACTOR) }}>
+            Позначити виконаною
+          </button>
         )}
-        <button className="back" onClick={() => { setSelectedOrder(null); setScreen(SCREENS.CONTRACTOR) }}>← Назад</button>
+        <button className="back" onClick={() => { setSelectedOrder(null); setScreen(S.CONTRACTOR) }}>← Назад</button>
       </div>
     )
   }

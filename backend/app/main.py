@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import Base, engine
 from .seed import seed_services
-from .routers import services, questions, orders, classify
+from .routers import services, orders, analyze
 
 Base.metadata.create_all(bind=engine)
 seed_services()
@@ -17,6 +17,5 @@ app.add_middleware(
 )
 
 app.include_router(services.router)
-app.include_router(questions.router)
 app.include_router(orders.router)
-app.include_router(classify.router)
+app.include_router(analyze.router)
