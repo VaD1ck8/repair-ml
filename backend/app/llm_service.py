@@ -1,9 +1,9 @@
 import os
 import json
 import re
-from anthropic import Anthropic
+from groq import Groq
 
-client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+client = Groq(api_key=os.getenv("GROQ_API_KEY", ""))
 
 FALLBACK_QUESTIONS = [
     {"id": "q1", "label": "Опишіть проблему детальніше", "type": "textarea"},
@@ -14,12 +14,13 @@ FALLBACK_QUESTIONS = [
 
 
 def _call_llm(prompt: str) -> str:
-    msg = client.messages.create(
-        model="claude-haiku-4-5",
-        max_tokens=512,
+    resp = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
+        max_tokens=600,
+        temperature=0.3,
     )
-    return msg.content[0].text.strip()
+    return resp.choices[0].message.content.strip()
 
 
 def classify_service(description: str, services: list[dict]) -> dict:
@@ -33,18 +34,14 @@ def classify_service(description: str, services: list[dict]) -> dict:
 
 Заявка клієнта: «{description}»
 
-Твоє завдання:
-1. Якщо заявка чітко відповідає одній з категорій — відповідай JSON:
-   {{"status": "classified", "service_id": <id>, "service_name": "<назва>", "confidence": <0.0-1.0>}}
+Якщо заявка чітко відповідає одній категорії (confidence >= 0.75):
+{{"status": "classified", "service_id": <id>, "service_name": "<назва>", "confidence": <float>}}
 
-2. Якщо незрозуміло яка категорія — відповідай JSON:
-   {{"status": "needs_clarification", "clarification_question": "<одне коротке питання>"}}
+Якщо незрозуміло — постав одне коротке питання і дай 3-5 варіантів відповідей:
+{{"status": "needs_clarification", "clarification_question": "<питання>", "clarification_options": ["варіант1", "варіант2", "варіант3"]}}
 
-Правила:
-- confidence >= 0.75 → classified
-- confidence < 0.75 → needs_clarification
-- Відповідай ТІЛЬКИ JSON, без пояснень і markdown.
-"""
+Відповідай ТІЛЬКИ JSON, без markdown і пояснень."""
+
     try:
         raw = _call_llm(prompt)
         raw = re.sub(r"```json|```", "", raw).strip()
@@ -56,15 +53,15 @@ def classify_service(description: str, services: list[dict]) -> dict:
                 "service_name": data["service_name"],
                 "confidence": data.get("confidence", 0.9),
                 "clarification_question": None,
+                "clarification_options": None,
             }
         return {
             "status": "needs_clarification",
             "service_id": None,
             "service_name": None,
             "confidence": None,
-            "clarification_question": data.get(
-                "clarification_question", "Уточніть, будь ласка, що саме потрібно відремонтувати?"
-            ),
+            "clarification_question": data.get("clarification_question", "Що саме потрібно відремонтувати?"),
+            "clarification_options": data.get("clarification_options", []),
         }
     except Exception:
         return {
@@ -72,26 +69,27 @@ def classify_service(description: str, services: list[dict]) -> dict:
             "service_id": None,
             "service_name": None,
             "confidence": None,
-            "clarification_question": "Уточніть, будь ласка, що саме потрібно відремонтувати?",
+            "clarification_question": "Що саме потрібно відремонтувати?",
+            "clarification_options": [],
         }
 
 
 def generate_questions(service_name: str, description: str) -> list[dict]:
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    if not os.getenv("GROQ_API_KEY"):
         return FALLBACK_QUESTIONS
 
     prompt = f"""Ти — помічник сервісного маркетплейсу.
 Сервіс: «{service_name}»
 Опис проблеми клієнта: «{description}»
 
-Згенеруй 4-6 уточнюючих питань для клієнта у форматі JSON-масиву:
+Згенеруй 4-6 уточнюючих питань у форматі JSON-масиву:
 [
-  {{"id": "q1", "label": "Питання", "type": "text|textarea|select|number",
+  {{"id": "q1", "label": "Питання", "type": "text|textarea|select|number|yesno",
     "options": ["варіант1", "варіант2"]}}
 ]
-"options" — тільки для type=select.
-Відповідай ТІЛЬКИ JSON-масивом без markdown.
-"""
+"options" — тільки для type=select або type=yesno.
+Відповідай ТІЛЬКИ JSON-масивом без markdown."""
+
     try:
         raw = _call_llm(prompt)
         raw = re.sub(r"```json|```", "", raw).strip()
