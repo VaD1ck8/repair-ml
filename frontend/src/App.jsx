@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { api } from "./api"
 
 const SCREENS = {
@@ -16,6 +16,7 @@ export default function App() {
   const [screen, setScreen] = useState(SCREENS.ROLE)
   const [description, setDescription] = useState("")
   const [clarificationQ, setClarificationQ] = useState("")
+  const [clarificationOptions, setClarificationOptions] = useState([])
   const [clarificationA, setClarificationA] = useState("")
   const [service, setService] = useState(null)
   const [questions, setQuestions] = useState([])
@@ -26,17 +27,23 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
-  async function handleDescribe() {
-    if (!description.trim()) return
+  async function runClassify(body) {
     setLoading(true)
     setError("")
     try {
-      const res = await api.post("/classify", { description })
+      const res = await api.post("/classify", body)
       if (res.status === "classified") {
         setService({ id: res.service_id, name: res.service_name })
-        await loadQuestions(res.service_id)
+        const qs = await api.post("/questions/generate", {
+          service_id: res.service_id,
+          description,
+        })
+        setQuestions(qs.questions || qs)
+        setScreen(SCREENS.QUESTIONS)
       } else {
         setClarificationQ(res.clarification_question)
+        setClarificationOptions(res.clarification_options || [])
+        setClarificationA("")
         setScreen(SCREENS.CLARIFY)
       }
     } catch {
@@ -45,35 +52,15 @@ export default function App() {
     setLoading(false)
   }
 
-  async function handleClarify() {
-    if (!clarificationA.trim()) return
-    setLoading(true)
-    setError("")
-    try {
-      const res = await api.post("/classify", {
-        description,
-        clarification_answer: clarificationA,
-      })
-      if (res.status === "classified") {
-        setService({ id: res.service_id, name: res.service_name })
-        await loadQuestions(res.service_id)
-      } else {
-        setError("Не вдалося визначити сервіс. Спробуйте описати детальніше.")
-        setScreen(SCREENS.DESCRIBE)
-      }
-    } catch {
-      setError("Помилка з'єднання.")
-    }
-    setLoading(false)
+  function handleDescribe() {
+    if (!description.trim()) return
+    runClassify({ description })
   }
 
-  async function loadQuestions(serviceId) {
-    const qs = await api.post("/questions/generate", {
-      service_id: serviceId,
-      description,
-    })
-    setQuestions(qs.questions || qs)
-    setScreen(SCREENS.QUESTIONS)
+  function handleClarify(answer) {
+    const a = answer || clarificationA
+    if (!a.trim()) return
+    runClassify({ description, clarification_answer: a })
   }
 
   async function handleSubmit() {
@@ -114,6 +101,7 @@ export default function App() {
     setDescription("")
     setClarificationA("")
     setClarificationQ("")
+    setClarificationOptions([])
     setService(null)
     setQuestions([])
     setAnswers({})
@@ -157,17 +145,48 @@ export default function App() {
     return (
       <div className="card">
         <h2>Уточнення</h2>
-        <p className="hint">AI не впевнена. Допоможіть уточнити:</p>
         <p className="question">{clarificationQ}</p>
-        <input
-          value={clarificationA}
-          onChange={e => setClarificationA(e.target.value)}
-          placeholder="Ваша відповідь..."
-        />
+
+        {clarificationOptions.length > 0 ? (
+          <div className="options">
+            {clarificationOptions.map(opt => (
+              <button
+                key={opt}
+                className={`option-btn ${clarificationA === opt ? "selected" : ""}`}
+                onClick={() => {
+                  setClarificationA(opt)
+                  handleClarify(opt)
+                }}
+                disabled={loading}
+              >
+                {opt}
+              </button>
+            ))}
+            <div className="divider">або напишіть свій варіант</div>
+            <input
+              value={clarificationA}
+              onChange={e => setClarificationA(e.target.value)}
+              placeholder="Свій варіант..."
+              onKeyDown={e => e.key === "Enter" && handleClarify()}
+            />
+            <button onClick={() => handleClarify()} disabled={loading || !clarificationA.trim()}>
+              {loading ? "Визначаємо..." : "Далі →"}
+            </button>
+          </div>
+        ) : (
+          <>
+            <input
+              value={clarificationA}
+              onChange={e => setClarificationA(e.target.value)}
+              placeholder="Ваша відповідь..."
+            />
+            <button onClick={() => handleClarify()} disabled={loading || !clarificationA.trim()}>
+              {loading ? "Визначаємо..." : "Далі →"}
+            </button>
+          </>
+        )}
+
         {error && <p className="error">{error}</p>}
-        <button onClick={handleClarify} disabled={loading || !clarificationA.trim()}>
-          {loading ? "Визначаємо..." : "Далі →"}
-        </button>
         <button className="back" onClick={() => setScreen(SCREENS.DESCRIBE)}>← Назад</button>
       </div>
     )
@@ -181,20 +200,41 @@ export default function App() {
         {questions.map(q => (
           <div key={q.id} className="field">
             <label>{q.label}</label>
-            {q.type === "textarea" ? (
+            {q.type === "yesno" ? (
+              <div className="options">
+                {["Так", "Ні"].map(opt => (
+                  <button
+                    key={opt}
+                    className={`option-btn ${answers[q.id] === opt ? "selected" : ""}`}
+                    onClick={() => setAnswers({ ...answers, [q.id]: opt })}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            ) : q.type === "textarea" ? (
               <textarea
                 rows={3}
                 value={answers[q.id] || ""}
                 onChange={e => setAnswers({ ...answers, [q.id]: e.target.value })}
               />
-            ) : q.type === "select" ? (
-              <select
-                value={answers[q.id] || ""}
-                onChange={e => setAnswers({ ...answers, [q.id]: e.target.value })}
-              >
-                <option value="">— оберіть —</option>
-                {(q.options || []).map(o => <option key={o}>{o}</option>)}
-              </select>
+            ) : q.type === "select" || q.type === "select_other" ? (
+              <div className="options">
+                {(q.options || []).map(opt => (
+                  <button
+                    key={opt}
+                    className={`option-btn ${answers[q.id] === opt ? "selected" : ""}`}
+                    onClick={() => setAnswers({ ...answers, [q.id]: opt })}
+                  >
+                    {opt}
+                  </button>
+                ))}
+                <input
+                  placeholder="Інший варіант..."
+                  value={["Так","Ні",...(q.options||[])].includes(answers[q.id]) ? "" : (answers[q.id] || "")}
+                  onChange={e => setAnswers({ ...answers, [q.id]: e.target.value })}
+                />
+              </div>
             ) : (
               <input
                 type={q.type === "number" ? "number" : "text"}
@@ -252,7 +292,7 @@ export default function App() {
           <div
             key={o.id}
             className={`order-item status-${o.status}`}
-            onClick={() => setSelectedOrder(o) || setScreen(SCREENS.ORDER_DETAIL)}
+            onClick={() => { setSelectedOrder(o); setScreen(SCREENS.ORDER_DETAIL) }}
           >
             <strong>{o.service_name || o.service_id}</strong>
             <span className="badge">{o.status}</span>

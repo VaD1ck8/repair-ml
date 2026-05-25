@@ -14,11 +14,12 @@ class ClassifyRequest(BaseModel):
 
 
 class ClassifyResponse(BaseModel):
-    status: str                  # "classified" | "needs_clarification"
+    status: str
     service_id: int | None = None
     service_name: str | None = None
     confidence: float | None = None
     clarification_question: str | None = None
+    clarification_options: list[str] | None = None
 
 
 @router.post("/classify", response_model=ClassifyResponse)
@@ -28,10 +29,7 @@ def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
         {"id": s.id, "name": s.name, "description": s.description}
         for s in services
     ]
-
     full_text = req.description
     if req.clarification_answer:
         full_text = f"{req.description}. Уточнення: {req.clarification_answer}"
-
-    result = classify_service(full_text, service_list)
-    return result
+    return classify_service(full_text, service_list)
